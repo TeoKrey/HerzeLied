@@ -7,7 +7,7 @@
 
     <title>Album — HerzeLied</title>
 
-    <link rel="stylesheet" href="/frontend/style.css">
+    <link rel="stylesheet" href="/frontend/style.css?v=20260918-7">
 </head>
 
 <body>
@@ -17,6 +17,19 @@
     <a href="/" class="logo">
         HERZELIED
     </a>
+
+    <div class="brand-mark-wrap" tabindex="0" aria-label="HerzeLied logo">
+        <img
+            class="brand-mark"
+            src="/media/logo_v1.png"
+            alt="HerzeLied"
+        >
+        <img
+            class="brand-mark-preview"
+            src="/media/logo_v1.png"
+            alt=""
+        >
+    </div>
 
     <a href="/" class="back" data-translation="Назад">
         ← Zurück
@@ -44,7 +57,7 @@
 
         <div class="album-details">
 
-            <div class="section-label" data-translation="Альбом">
+            <div id="release-type-label" class="section-label" data-translation="Альбом">
                 ALBUM
             </div>
 
@@ -154,6 +167,16 @@
 
     <div class="player-right">
 
+        <a
+            id="player-lyrics"
+            class="lyrics-button"
+            href="/frontend/song.html"
+            aria-label="Liedtext öffnen"
+            data-translation="Текст песни"
+        >
+            Tt
+        </a>
+
         <button id="player-volume" class="volume-button">
             <span data-translation="Громкость">TON</span>
         </button>
@@ -168,7 +191,7 @@
 </div>
 
 
-<script src="/frontend/script.js"></script>
+<script src="/frontend/script.js?v=20260918-8"></script>
 
 </body>
 

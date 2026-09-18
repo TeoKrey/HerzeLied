@@ -4,7 +4,8 @@ from backend.database import SessionLocal
 from backend.models import Song, Lyrics
 
 session = SessionLocal()
-lyrics_dir = Path("media/lyrics/Rammstein/Rammstein_2019")
+# lyrics_dir = Path("media/lyrics/Rammstein/Rammstein_2019")
+lyrics_dir = Path("media/lyrics/Anna-Maria Zimmermann/Bauchgefühl")
 
 for file_path in lyrics_dir.glob("*.txt"):
     song_title = file_path.stem.split("_", 1)[1].replace("_", " ")

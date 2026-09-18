@@ -1,7 +1,7 @@
-from backend.database import engine, Base
+from backend.init_db import init_db
 
 def main() -> None:
-    Base.metadata.create_all(bind=engine)
+    init_db()
     print("Database tables created (or already existed).")
 
 

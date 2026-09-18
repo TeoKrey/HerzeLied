@@ -41,14 +41,7 @@ function getMediaPath(path) {
 
 
 function getAudioPath(song) {
-    const normalizedTitle = song.title
-        .replace(/[äÄ]/g, "a")
-        .replace(/[öÖ]/g, "o")
-        .replace(/[üÜ]/g, "u")
-        .replace(/ß/g, "ss")
-        .replace(/\s+/g, "_");
-
-    return `${API_URL}/media/songs/Rammstein/Rammstein_2019/${String(song.track_number).padStart(2, "0")}_${normalizedTitle}.mp3`;
+    return `${API_URL}/songs/${song.id}/audio`;
 }
 
 
@@ -58,10 +51,59 @@ function setPlayerCover(song) {
         return;
     }
 
-    const coverPath = albumCovers[song.album_id] || "media/covers/rammstein/rammstein_2019.jpg";
+    const coverPath = song.album_cover_path
+        || albumCovers[song.album_id]
+        || "media/covers/rammstein/rammstein_2019.jpg";
     cover.style.backgroundImage = `url("${getMediaPath(coverPath)}")`;
     cover.style.backgroundSize = "cover";
     cover.style.backgroundPosition = "center";
+}
+
+
+function setPlayerLyricsLink(song) {
+    const lyricsLink = document.getElementById("player-lyrics");
+    if (!lyricsLink || !song) {
+        return;
+    }
+
+    lyricsLink.href = `/frontend/song.html?id=${song.id}`;
+}
+
+
+function setPlayerSongInfo(song) {
+    const title = document.getElementById("player-title");
+    const subtitle = document.getElementById("player-subtitle");
+
+    if (title) {
+        title.textContent = song.title;
+    }
+
+    if (subtitle) {
+        subtitle.textContent = song.artist_name || "";
+    }
+}
+
+
+function getSongPageUrl(song) {
+    return `/frontend/song.html?id=${song.id}`;
+}
+
+
+function getCurrentSongId() {
+    if (currentSong?.id) {
+        return currentSong.id;
+    }
+
+    try {
+        const savedState = JSON.parse(localStorage.getItem(PLAYER_STATE_KEY));
+        if (savedState?.songId) {
+            return savedState.songId;
+        }
+    } catch {
+        return null;
+    }
+
+    return localStorage.getItem("herzelied-song-id");
 }
 
 
@@ -165,6 +207,11 @@ async function navigateTo(url, addHistory = true) {
     }
 
     await loadCurrentPage();
+
+    const audioAfterNavigation = document.getElementById("global-audio");
+    if (currentSong) {
+        updatePlayerState(Boolean(audioAfterNavigation && !audioAfterNavigation.paused));
+    }
 }
 
 
@@ -185,7 +232,7 @@ function initializeNavigation() {
             return;
         }
 
-        const target = new URL(link.href, window.location.origin);
+        let target = new URL(link.href, window.location.origin);
 
         if (
             target.origin !== window.location.origin ||
@@ -198,6 +245,19 @@ function initializeNavigation() {
             ].includes(target.pathname)
         ) {
             return;
+        }
+
+        if (link.id === "player-lyrics") {
+            const songId = getCurrentSongId();
+            if (!songId) {
+                event.preventDefault();
+                return;
+            }
+
+            target = new URL(
+                `/frontend/song.html?id=${songId}`,
+                window.location.origin
+            );
         }
 
         event.preventDefault();
@@ -229,13 +289,17 @@ async function restorePlayerState() {
     }
 
     let song = currentSongs.find(item => item.id === state.songId);
+    const response = await fetch(`${API_URL}/songs/${state.songId}`);
+    if (response.ok) {
+        const freshSong = await response.json();
+        song = freshSong;
+        currentSongs = currentSongs.length
+            ? currentSongs.map(item => item.id === freshSong.id ? freshSong : item)
+            : [freshSong];
+    }
+
     if (!song) {
-        const response = await fetch(`${API_URL}/songs/${state.songId}`);
-        if (!response.ok) {
-            return;
-        }
-        song = await response.json();
-        currentSongs = getSavedSongList();
+        return;
     }
 
     currentSong = song;
@@ -243,10 +307,10 @@ async function restorePlayerState() {
     audio.volume = typeof state.volume === "number" ? state.volume : 1;
     audio.src = getAudioPath(song);
 
-    document.getElementById("player-title").textContent = song.title;
-    document.getElementById("player-subtitle").textContent = "Rammstein";
+    setPlayerSongInfo(song);
     clearActivePlayerTranslations();
     setPlayerCover(song);
+    setPlayerLyricsLink(song);
     document.getElementById("player-duration").textContent = formatDuration(song.duration_seconds);
 
     audio.addEventListener("loadedmetadata", () => {
@@ -256,6 +320,8 @@ async function restorePlayerState() {
     if (!state.paused) {
         audio.play().catch(() => {});
     }
+
+    updatePlayerState(!state.paused);
 }
 
 
@@ -589,19 +655,11 @@ function playSong(song, songs = currentSongs) {
     audio.src = getAudioPath(song);
 
 
-    document.getElementById(
-        "player-title"
-    ).textContent =
-        song.title;
-
-
-    document.getElementById(
-        "player-subtitle"
-    ).textContent =
-        "Rammstein";
+    setPlayerSongInfo(song);
 
     clearActivePlayerTranslations();
     setPlayerCover(song);
+    setPlayerLyricsLink(song);
 
 
     document.getElementById(
@@ -715,7 +773,7 @@ function playPreviousSong() {
    SONG CARD
 ========================================================= */
 
-function createSongCard(song, songs) {
+function createSongCard(song, songs, showTrackNumber = false) {
 
     const card =
         document.createElement("div");
@@ -731,9 +789,9 @@ function createSongCard(song, songs) {
 
     card.innerHTML = `
 
-        <div class="song-number">
-            ${String(song.track_number).padStart(2, "0")}
-        </div>
+        ${showTrackNumber
+            ? `<div class="song-number">${String(song.track_number).padStart(2, "0")}</div>`
+            : `<img class="song-cover-thumb" src="${getMediaPath(song.album_cover_path)}" alt="">`}
 
 
         <div class="song-info">
@@ -742,7 +800,11 @@ function createSongCard(song, songs) {
                 ${song.title}
             </h2>
 
-            <p>
+            <p class="song-artist">
+                ${song.artist_name || ""}
+            </p>
+
+            <p class="song-duration-small">
                 ${formatDuration(song.duration_seconds)}
             </p>
 
@@ -758,11 +820,12 @@ function createSongCard(song, songs) {
 
 
         <a
-            class="song-open"
-            href="/frontend/song.html?id=${song.id}"
-            aria-label="Öffnen: ${song.title}"
+            class="song-lyrics"
+            href="${getSongPageUrl(song)}"
+            aria-label="Liedtext öffnen: ${song.title}"
+            data-translation="Текст песни"
         >
-            →
+            Tt
         </a>
 
     `;
@@ -782,7 +845,7 @@ function createSongCard(song, songs) {
             */
 
             if (
-                event.target.closest(".song-open")
+                event.target.closest(".song-lyrics")
             ) {
                 return;
             }
@@ -870,13 +933,13 @@ async function loadAlbums() {
 
         const response =
             await fetch(
-                `${API_URL}/albums`
+                `${API_URL}/releases`
             );
 
 
         if (!response.ok) {
             throw new Error(
-                "Failed to load albums"
+                "Failed to load releases"
             );
         }
 
@@ -920,7 +983,9 @@ async function loadAlbums() {
                     >
 
                     <div class="album-overlay">
-                        <span data-translation="Открыть альбом">ALBUM ÖFFNEN</span>
+                        <span data-translation="Открыть релиз">
+                            ${album.release_type === "single" ? "SINGLE ÖFFNEN" : "ALBUM ÖFFNEN"}
+                        </span>
                     </div>
 
                 </div>
@@ -1074,13 +1139,13 @@ async function loadAlbum() {
 
         const response =
             await fetch(
-                `${API_URL}/albums/${albumId}`
+                `${API_URL}/releases/${albumId}`
             );
 
 
         if (!response.ok) {
             throw new Error(
-                "Album not found"
+                "Release not found"
             );
         }
 
@@ -1089,6 +1154,16 @@ async function loadAlbum() {
             await response.json();
 
         albumCovers[album.id] = album.cover_path;
+
+        const releaseTypeLabel =
+            document.getElementById("release-type-label");
+
+        if (releaseTypeLabel) {
+            releaseTypeLabel.textContent =
+                album.release_type === "single" ? "SINGLE" : "ALBUM";
+            releaseTypeLabel.dataset.translation =
+                album.release_type === "single" ? "Сингл" : "Альбом";
+        }
 
 
         document.title =
@@ -1161,7 +1236,8 @@ async function loadAlbum() {
             container.appendChild(
                 createSongCard(
                     song,
-                    currentSongs
+                    currentSongs,
+                    true
                 )
             );
 
@@ -1245,6 +1321,16 @@ async function loadSong() {
         ).textContent =
             `TITEL ${String(song.track_number).padStart(2, "0")}`;
 
+        const releaseTypeLabel =
+            document.getElementById("release-type-label");
+
+        if (releaseTypeLabel) {
+            releaseTypeLabel.textContent =
+                song.release_type === "single" ? "SINGLE" : "ALBUM";
+            releaseTypeLabel.dataset.translation =
+                song.release_type === "single" ? "Сингл" : "Альбом";
+        }
+
 
         document.getElementById(
             "song-duration"
@@ -1295,20 +1381,18 @@ async function loadSong() {
 
 
         if (!keepCurrentPlayback) {
-            document.getElementById(
-                "player-title"
-            ).textContent =
-                song.title;
+            setPlayerSongInfo(song);
         }
 
-
-        document.getElementById(
-            "player-subtitle"
-        ).textContent =
-            "Rammstein";
+        setPlayerLyricsLink(song);
 
 
         await loadLyrics(songId);
+
+        document.querySelector(".lyrics-section")?.scrollIntoView({
+            block: "start",
+            behavior: "auto",
+        });
 
     } catch (error) {
 
@@ -1381,8 +1465,13 @@ function renderLyrics(
 
     container.replaceChildren();
 
+    const footnotes = extractFootnotes(lyrics);
+    const visibleLyrics = lyrics.filter(line =>
+        !footnotes.lines.has(line.original)
+        && !footnotes.lines.has(line.translation)
+    );
 
-    lyrics.forEach(line => {
+    visibleLyrics.forEach(line => {
 
         const pair =
             document.createElement("div");
@@ -1408,12 +1497,18 @@ function renderLyrics(
             "lyrics-line translation";
 
 
-        original.textContent =
-            line.original;
+        renderLyricsLine(
+            original,
+            line.original,
+            footnotes.text
+        );
 
 
-        translation.textContent =
-            line.translation;
+        renderLyricsLine(
+            translation,
+            line.translation,
+            footnotes.text
+        );
 
 
         pair.append(
@@ -1427,6 +1522,91 @@ function renderLyrics(
         );
 
     });
+}
+
+
+function extractFootnotes(lyrics) {
+
+    const noteLines = [];
+    let noteStarted = false;
+
+    lyrics.forEach(line => {
+        const original = (line.original || "").trim();
+        const translation = (line.translation || "").trim();
+        const note = !original && translation || !translation && original;
+        const startsNote = Boolean(note && note.startsWith("*"));
+
+        if (startsNote) {
+            noteStarted = true;
+        }
+
+        if (noteStarted && note) {
+            noteLines.push(note);
+        }
+    });
+
+    if (!noteLines.length) {
+        return { lines: new Set(), text: "" };
+    }
+
+    return {
+        lines: new Set(noteLines),
+        text: noteLines.join(" ").replace(/\s+/g, " ").trim(),
+    };
+}
+
+
+function renderLyricsLine(element, text, footnoteText) {
+
+    if (!footnoteText || !text.includes("*")) {
+        element.textContent = text;
+        return;
+    }
+
+    const parts = text.split("*");
+
+    parts.forEach((part, index) => {
+        if (index > 0) {
+            const marker = document.createElement("span");
+            marker.className = "lyrics-footnote-marker";
+            marker.textContent = "*";
+            marker.tabIndex = 0;
+
+            marker.addEventListener("mouseenter", () => {
+                updateFootnotePosition(marker);
+                marker.classList.add("is-open");
+            });
+            marker.addEventListener("mouseleave", () => {
+                marker.classList.remove("is-open");
+            });
+            marker.addEventListener("focus", () => {
+                updateFootnotePosition(marker);
+                marker.classList.add("is-open");
+            });
+            marker.addEventListener("blur", () => {
+                marker.classList.remove("is-open");
+            });
+
+            const popup = document.createElement("span");
+            popup.className = "lyrics-footnote-popup";
+            popup.textContent = footnoteText;
+            marker.appendChild(popup);
+            element.appendChild(marker);
+        }
+
+        element.appendChild(document.createTextNode(part));
+    });
+}
+
+
+function updateFootnotePosition(marker) {
+
+    const popup = marker.querySelector(".lyrics-footnote-popup");
+    const markerTop = marker.getBoundingClientRect().top;
+    const popupHeight = popup?.getBoundingClientRect().height || 300;
+    const hasRoomAbove = markerTop >= popupHeight + 24;
+
+    marker.classList.toggle("is-below", !hasRoomAbove);
 }
 
 

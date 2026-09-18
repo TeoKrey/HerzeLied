@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+from enum import Enum
+
+from sqlalchemy import Enum as SqlEnum
 from sqlalchemy import ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
+
+
+class ReleaseType(str, Enum):
+    ALBUM = "album"
+    SINGLE = "single"
 
 
 class Artist(Base):
@@ -11,6 +19,10 @@ class Artist(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    biography: Mapped[str | None] = mapped_column(Text, nullable=True)
+    country: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    image_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    website: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     albums: Mapped[list[Album]] = relationship(
         "Album",
@@ -29,6 +41,16 @@ class Album(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     year: Mapped[int] = mapped_column(Integer, nullable=False)
     cover_path: Mapped[str] = mapped_column(String(255), nullable=True)
+    release_type: Mapped[ReleaseType] = mapped_column(
+        SqlEnum(
+            ReleaseType,
+            native_enum=False,
+            length=20,
+            values_callable=lambda enum_type: [item.value for item in enum_type],
+        ),
+        nullable=False,
+        default=ReleaseType.ALBUM,
+    )
     artist_id: Mapped[int] = mapped_column(
         ForeignKey("artists.id", ondelete="CASCADE"), nullable=False
     )
