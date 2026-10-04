@@ -1,46 +1,75 @@
 from backend.database import SessionLocal
-from backend.models import Artist, Album, ReleaseType
+from backend.models import Album, Artist, ReleaseType
 
-session = SessionLocal()
 
-# artist = Artist(
-#     name = "Rammstein"
-# )
-# session.add(artist)
-# session.commit()
-# # session.close()
-# print(artist.id)
+ALBUMS = [
+    ("Rammstein", "Rammstein", 2019, "media/covers/rammstein/rammstein_2019.jpg"),
+    (
+        "Anna-Maria Zimmermann",
+        "Bauchgefühl",
+        2015,
+        "media/covers/Anna-Maria Zimmermann/Bauchgefühl/Bauchgefühl.jpg",
+    ),
+    ("Sturmmann", "Taiga", 2026, "media/covers/Sturmmann/Taiga/Taiga.png"),
+    (
+        "Reinhard Mey",
+        "Flaschenpost",
+        1991,
+        "media/covers/Reinhard Mey/Flaschenpost/Flaschenpost.png",
+    ),
+    ("Nnd", "Dachlatte", 2026, "media/covers/Nnd/Dachlatte/Dachlatte.jpg"),
+    (
+        "Rammstein",
+        "Herzeleid",
+        1995,
+        "media/covers/rammstein/Herzeleid/Herzeleid.jpg",
+    ),
+    (
+        "Rammstein",
+        "Liebe ist für alle da",
+        2009,
+        "media/covers/rammstein/Liebe ist für alle da.jpg",
+    ),
+]
 
-# artist = session.query(Artist).filter_by(name="Rammstein").first()
 
-# album = Album(
-#     title = 'Rammstein_2019',
-#     year = 2019,
-#     cover_path = "media\covers\rammstein\rammstein_2019.jpg",
-#     artist = artist
-# )
-artist = Artist(
-    name="Anna-Maria Zimmermann"
-)
+def main() -> None:
+    session = SessionLocal()
+    try:
+        for artist_name, title, year, cover_path in ALBUMS:
+            artist = session.query(Artist).filter_by(name=artist_name).first()
+            if artist is None:
+                artist = Artist(name=artist_name)
+                session.add(artist)
+                session.flush()
 
-session.add(artist)
-session.commit()
+            album = (
+                session.query(Album)
+                .filter_by(artist_id=artist.id, title=title)
+                .first()
+            )
+            if album is None:
+                album = Album(
+                    artist_id=artist.id,
+                    title=title,
+                    year=year,
+                    cover_path=cover_path,
+                    release_type=ReleaseType.ALBUM,
+                )
+                session.add(album)
+            else:
+                album.year = year
+                album.cover_path = cover_path
+                album.release_type = ReleaseType.ALBUM
 
-print(artist.id)
+        session.commit()
+        print(f"Imported or updated {len(ALBUMS)} historical albums.")
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
 
-album = Album(
-    title="Bauchgefühl",
-    year=2015,
-    cover_path="media/covers/Anna-Maria Zimmermann/Bauchgefühl/Bauchgefühl.jpg",
-    release_type=ReleaseType.ALBUM,
-    artist=artist
-)
 
-session.add(album)
-session.commit()
-
-print(album.id)
-print(album.artist_id)
-print(album.artist.name)
-print(artist.albums)
-session.close()
+if __name__ == "__main__":
+    main()
